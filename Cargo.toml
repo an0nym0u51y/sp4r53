@@ -1,0 +1,27 @@
+[package]
+name = "sp4r53"
+description = ""
+version = "0.0.0"
+homepage = "https://github.com/r3v2d0g/sp4r53"
+repository = "https://github.com/r3v2d0g/sp4r53.git"
+documentation = "https://docs.rs/sp4r53"
+keywords = []
+categories = []
+readme = "README.org"
+license = "MPL-2.0"
+authors = ["Matthieu Le brazidec (r3v2d0g) <r3v2d0g@jesus.gg>"]
+edition = "2018"
+
+[features]
+default = ["thiserror"]
+
+[dependencies]
+blake3 = "0.3"
+ethnum = "1.0"
+
+[dependencies.thiserror]
+version = "1.0"
+optional = true
+
+[dev-dependencies]
+proptest = "0.10"
