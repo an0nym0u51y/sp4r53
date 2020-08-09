@@ -1,7 +1,7 @@
 [package]
 name = "sp4r53"
-description = ""
-version = "0.0.0"
+description = "Sparse merkle tree with on demand flushing"
+version = "0.1.0"
 homepage = "https://github.com/r3v2d0g/sp4r53"
 repository = "https://github.com/r3v2d0g/sp4r53.git"
 documentation = "https://docs.rs/sp4r53"

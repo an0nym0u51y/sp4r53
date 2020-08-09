@@ -1,5 +1,9 @@
 #+TITLE: Sparse Merkle tree
 
+[[https://github.com/r3v2d0g/sp4r53/blob/main/LICENSE.txt][https://img.shields.io/crates/l/sp4r53.svg]]
+[[https://crates.io/sp4r53][https://img.shields.io/crates/v/sp4r53.svg]]
+[[https://docs.rs/sp4r53][https://docs.rs/sp4r53.svg]]
+
 A sparse Merkle tree implementation that only recomputes its branches' hashes when asked.
 
 * Example
