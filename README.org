@@ -1,5 +1,39 @@
 #+TITLE: Sparse Merkle tree
 
+A sparse Merkle tree implementation that only recomputes its branches' hashes when asked.
+
+* Example
+#+BEGIN_SRC rust
+use sp4r53::{blake3, Proof, Tree};
+
+let foo = blake3::hash(b"foo");
+let bar = blake3::hash(b"bar");
+let baz = blake3::hash(b"baz");
+
+let mut tree = Tree::new();
+
+tree.insert(foo);
+tree.insert(bar);
+tree.insert(baz);
+assert_eq!(tree.is_valid(), false);
+
+let root = tree.flush();
+assert_eq!(tree.is_valid(), true);
+assert_eq!(tree.root(), Some(root));
+
+let proof = tree.proove(&[foo, baz]).unwrap();
+assert_eq!(proof.verify(root), true);
+
+let encoded = proof.as_bytes();
+let decoded = Proof::from_bytes(&encoded).unwrap();
+assert_eq!(decoded, proof);
+
+tree.remove(bar);
+
+let root = tree.flush();
+assert_eq!(proof.verify(root), false);
+#+END_SRC
+
 * About
 ** License
 #+BEGIN_SRC text :tangle LICENSE.txt

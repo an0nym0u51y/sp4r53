@@ -6,7 +6,48 @@
  *                                                                                                *
  **************************************************************************************************/
 
+// ======================================== Documentation ======================================= \\
+
+//! # Sparse Merkle tree
+//!
+//! A sparse Merkle tree implementation that only recomputes its branches' hashes when asked.
+//!
+//! ## Example
+//!
+//! ```rust
+//! use sp4r53::{blake3, Proof, Tree};
+//!
+//! let foo = blake3::hash(b"foo");
+//! let bar = blake3::hash(b"bar");
+//! let baz = blake3::hash(b"baz");
+//!
+//! let mut tree = Tree::new();
+//!
+//! tree.insert(foo);
+//! tree.insert(bar);
+//! tree.insert(baz);
+//! assert_eq!(tree.is_valid(), false);
+//!
+//! let root = tree.flush();
+//! assert_eq!(tree.is_valid(), true);
+//! assert_eq!(tree.root(), Some(root));
+//!
+//! let proof = tree.proove(&[foo, baz]).unwrap();
+//! assert_eq!(proof.verify(root), true);
+//!
+//! let encoded = proof.as_bytes();
+//! let decoded = Proof::from_bytes(&encoded).unwrap();
+//! assert_eq!(decoded, proof);
+//!
+//! tree.remove(bar);
+//!
+//! let root = tree.flush();
+//! assert_eq!(proof.verify(root), false);
+//! ```
+
 // =========================================== Imports ========================================== \\
+
+pub use blake3;
 
 use blake3::{Hash, Hasher};
 use core::convert::TryFrom;
@@ -33,12 +74,26 @@ const LEAF_TAG: u8 = 3;
 // ============================================ Types =========================================== \\
 
 #[derive(Default, Debug)]
+/// A sparse Merkle tree that only recomputes its branches' hashes when asked.
+///
+/// The tree doesn't compute its branches' hashes after [inserting] or [removing] data and instead
+/// remove invalidated hashes, and mark itself as [invalid]. To re-compute the removed hashes and
+/// re-validate the tree, you need to [flush] it.
+///
+/// [`Proof`s]: Proof
+/// [inserting]: Tree::insert()
+/// [removing]: Tree::remove()
+/// [invalid]: Tree::is_valid()
+/// [flush]: Tree::flush()
 pub struct Tree {
     root: Branch,
     leaves: usize,
 }
 
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Debug)]
+/// A proof that a list of hashes are leaves part of a [`Tree`].
+///
+/// Proofs can be created either using [`Proof::new()`] or [`Tree::proove()`].
 pub struct Proof {
     root: ProofBranch,
 }
@@ -67,7 +122,7 @@ enum Node {
     Empty,
 }
 
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Debug)]
 enum ProofNode {
     Branch(Box<ProofBranch>),
     Hash(Box<Hash>),
@@ -83,7 +138,7 @@ struct Branch {
     right: Node,
 }
 
-#[derive(Debug)]
+#[derive(Eq, PartialEq, Debug)]
 struct ProofBranch {
     height: u8,
     left: ProofNode,
@@ -105,6 +160,7 @@ impl Tree {
     // ==================================== Constructors ==================================== \\
 
     #[inline]
+    /// Creates a new empty sparse Merkle tree.
     pub fn new() -> Self {
         Self::default()
     }
@@ -112,27 +168,186 @@ impl Tree {
     // ======================================== Read ======================================== \\
 
     #[inline]
+    /// Returns the root hash of the tree, or [`None`] if the tree is [invalid].
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    /// let baz = blake3::hash(b"baz");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// tree.insert(baz);
+    ///
+    /// let root1 = tree.flush();
+    /// assert_eq!(tree.root(), Some(root1));
+    ///
+    /// tree.remove(bar);
+    ///
+    /// let root2 = tree.flush();
+    /// assert_eq!(tree.root(), Some(root2));
+    ///
+    /// tree.insert(bar);
+    ///
+    /// let root3 = tree.flush();
+    /// assert_eq!(tree.root(), Some(root3));
+    /// ```
+    ///
+    /// [invalid]: Tree::is_valid()
     pub fn root(&self) -> Option<Hash> {
         self.root.hash
     }
 
     #[inline]
+    /// Returns the number of leaves in the tree.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    /// let baz = blake3::hash(b"baz");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// tree.insert(baz);
+    ///
+    /// assert_eq!(tree.leaves(), 3);
+    ///
+    /// tree.remove(bar);
+    ///
+    /// assert_eq!(tree.leaves(), 2);
+    /// ```
     pub fn leaves(&self) -> usize {
         self.leaves
     }
 
     #[inline]
+    /// Returns whether the tree is valid.
+    ///
+    /// A newly created tree is invalid, and calling [`insert()`] or [`remove()`] will make a
+    /// valid tree invalid. Calling [`flush()`] or [`proove()`] (whether the method returns an
+    /// error or not), will make the tree valid.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    ///
+    /// let mut tree = Tree::new();
+    /// assert_eq!(tree.is_valid(), false);
+    ///
+    /// tree.flush();
+    /// assert_eq!(tree.is_valid(), true);
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// assert_eq!(tree.is_valid(), false);
+    ///
+    /// tree.flush();
+    /// assert_eq!(tree.is_valid(), true);
+    /// ```
+    ///
+    /// [`insert()`]: Tree::insert()
+    /// [`remove()`]: Tree::remove()
+    /// [`flush()`]: Tree::flush()
+    /// [`proove()`]: Tree::proove()
     pub fn is_valid(&self) -> bool {
         self.root.hash.is_some()
     }
 
     #[inline]
+    /// Returns whether the tree contains a leaf with the provided hash.
     pub fn contains(&self, hash: Hash) -> bool {
         self.root.contains(Leaf::from(hash))
     }
 
     // ===================================== Read+Write ===================================== \\
 
+    #[inline]
+    /// [Flushes] the tree and tries to generate a new [`Proof`] of the inclusion of the given
+    /// hashes.
+    ///
+    /// Note that this is the same as calling [`flush()`] and then [`Proof::new()`].
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    /// let baz = blake3::hash(b"baz");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// tree.insert(baz);
+    ///
+    /// let proof = tree.proove(&[foo, baz]).unwrap();
+    ///
+    /// let root = tree.root().unwrap();
+    /// assert_eq!(proof.verify(root), true);
+    ///
+    /// let hashes = proof.hashes();
+    /// assert_eq!(hashes.len(), 2);
+    /// assert_eq!(hashes.contains(&foo), true);
+    /// assert_eq!(hashes.contains(&bar), false);
+    /// assert_eq!(hashes.contains(&baz), true);
+    /// ```
+    ///
+    /// [Flushes]: Tree::flush()
+    /// [`flush()`]: Tree::flush()
+    pub fn proove(&mut self, hashes: &[Hash]) -> Result<Proof, Error> {
+        self.flush();
+
+        Proof::new(&self, hashes)
+    }
+
+    /// Inserts an hash into the tree, invalidating it and returning `true` if it didn't already
+    /// contain it, or `false` otherwise.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// assert_eq!(tree.insert(foo), true);
+    /// assert_eq!(tree.insert(bar), true);
+    /// assert_eq!(tree.is_valid(), false);
+    ///
+    /// tree.flush();
+    /// assert_eq!(tree.is_valid(), true);
+    ///
+    /// assert_eq!(tree.insert(foo), false);
+    /// assert_eq!(tree.insert(bar), false);
+    /// assert_eq!(tree.is_valid(), true);
+    ///
+    /// tree.remove(foo);
+    ///
+    /// assert_eq!(tree.insert(foo), true);
+    /// assert_eq!(tree.insert(bar), false);
+    /// assert_eq!(tree.is_valid(), false);
+    /// ```
     pub fn insert(&mut self, hash: Hash) -> bool {
         let leaf = Box::<Leaf>::from(hash);
         let inserted = self.root.insert(leaf);
@@ -144,6 +359,37 @@ impl Tree {
         inserted
     }
 
+    /// Removes an hash from the tree, invalidating it and returning `true` if it contained it, or
+    /// `false` otherwise.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    ///
+    /// assert_eq!(tree.remove(foo), true);
+    /// assert_eq!(tree.is_valid(), false);
+    ///
+    /// tree.flush();
+    /// assert_eq!(tree.is_valid(), true);
+    ///
+    /// assert_eq!(tree.remove(foo), false);
+    /// assert_eq!(tree.is_valid(), true);
+    ///
+    /// tree.insert(foo);
+    ///
+    /// assert_eq!(tree.remove(foo), true);
+    /// assert_eq!(tree.remove(bar), true);
+    /// assert_eq!(tree.is_valid(), false);
+    /// ```
     pub fn remove(&mut self, hash: Hash) -> bool {
         let leaf = Leaf::from(hash);
         let removed = self.root.remove(leaf);
@@ -155,7 +401,36 @@ impl Tree {
         removed
     }
 
-    #[inline]
+    /// Flushes the tree, recomputing any missing or invalidated branch hash, and marking the tree
+    /// as valid.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    /// let baz = blake3::hash(b"baz");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// tree.insert(baz);
+    ///
+    /// let root1 = tree.flush();
+    ///
+    /// tree.remove(bar);
+    ///
+    /// let root2 = tree.flush();
+    /// assert_ne!(root1, root2);
+    ///
+    /// tree.insert(bar);
+    ///
+    /// let root3 = tree.flush();
+    /// assert_eq!(root1, root3);
+    /// ```
     pub fn flush(&mut self) -> Hash {
         if self.root.left.is_empty() && self.root.right.is_empty() {
             self.root.hash = Some(Hash::from([0; 32]));
@@ -171,6 +446,43 @@ impl Tree {
 impl Proof {
     // ==================================== Constructors ==================================== \\
 
+    /// Tries to generate a new proof for the inclusion of the given hashes in a [`Tree`].
+    ///
+    /// Note that if the tree is [invalid], an error will be returned. You'll either need to [flush]
+    /// the tree or use [`Tree::proove()`] instead of this method.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Proof, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    /// let baz = blake3::hash(b"baz");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// tree.insert(baz);
+    ///
+    /// assert!(Proof::new(&tree, &[foo, baz]).is_err());
+    ///
+    /// tree.flush();
+    /// let proof = Proof::new(&tree, &[foo, baz]).unwrap();
+    ///
+    /// let root = tree.root().unwrap();
+    /// assert_eq!(proof.verify(root), true);
+    ///
+    /// let hashes = proof.hashes();
+    /// assert_eq!(hashes.len(), 2);
+    /// assert_eq!(hashes.contains(&foo), true);
+    /// assert_eq!(hashes.contains(&bar), false);
+    /// assert_eq!(hashes.contains(&baz), true);
+    /// ```
+    ///
+    /// [invalid]: Tree::is_valid()
+    /// [flush]: Tree::flush()
     pub fn new(tree: &Tree, hashes: &[Hash]) -> Result<Self, Error> {
         if !tree.is_valid() {
             return Err(Error::InvalidTree);
@@ -188,6 +500,35 @@ impl Proof {
         })
     }
 
+    /// Tries to convert bytes returned by [`as_bytes()`] back to a [`Proof`].
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Proof, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    /// let baz = blake3::hash(b"baz");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// tree.insert(baz);
+    ///
+    /// let root = tree.flush();
+    /// let proof = tree.proove(&[foo, bar]).unwrap();
+    ///
+    /// assert_eq!(proof.verify(root), true);
+    ///
+    /// let encoded = proof.as_bytes();
+    /// let decoded = Proof::from_bytes(&encoded).unwrap();
+    ///
+    /// assert_eq!(decoded.verify(root), true);
+    /// ```
+    ///
+    /// [`as_bytes()`]: Proof::as_bytes()
     pub fn from_bytes(buf: &[u8]) -> Result<Self, Error> {
         Ok(Proof {
             root: ProofBranch::from_bytes(buf)?.0,
@@ -196,7 +537,50 @@ impl Proof {
 
     // ======================================== Read ======================================== \\
 
-    fn nodes(&self) -> (usize, usize) {
+    /// Converts the proof into bytes using an efficient-ish format.
+    ///
+    /// ## Format
+    ///
+    /// ```text
+    /// height = 255..0 as u8 (little endian)
+    ///
+    /// tag = (empty_tag || branch_tag || hash_tag || leaf_tag) (empty_tag || branch_tag || hash_tag || leaf_tag)
+    /// empty_tag = 0000 as u4
+    /// branch_tag = 0001 as u4
+    /// hash_tag = 0010 as u4
+    /// leaf_tag = 0011 as u4
+    ///
+    /// node = branch || hash || leaf || empty
+    /// branch = height tag node node
+    /// hash = [u8; 32]
+    /// leaf = [u8; 32]
+    /// empty = ()
+    /// ```
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Proof, Tree};
+    ///
+    /// let hash1 = blake3::Hash::from([0; 32]);
+    /// let hash2 = blake3::Hash::from([255; 32]);
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(hash1);
+    /// tree.insert(hash2);
+    ///
+    /// let proof = tree.proove(&[hash1]).unwrap();
+    ///
+    /// let mut encoded = vec![0; 66];
+    /// encoded[0] = 255u8.to_le();
+    /// encoded[1] = 0b0011_0010;
+    /// encoded[2..34].copy_from_slice(hash1.as_bytes());
+    /// encoded[34..66].copy_from_slice(hash2.as_bytes());
+    ///
+    /// assert_eq!(proof.as_bytes(), encoded);
+    /// ```
+    pub fn as_bytes(&self) -> Vec<u8> {
         fn nodes(branch: &ProofBranch, branches: &mut usize, hashes: &mut usize) {
             match &branch.left {
                 ProofNode::Branch(branch) => {
@@ -216,21 +600,87 @@ impl Proof {
                 ProofNode::Empty => (),
             }
         }
-
+       
         let (mut branches, mut hashes) = (1, 0);
         nodes(&self.root, &mut branches, &mut hashes);
 
-        (branches, hashes)
-    }
-
-    pub fn as_bytes(&self) -> Vec<u8> {
-        let (branches, hashes) = self.nodes();
         let mut buf = vec![0; 2 * branches + hashes * 32];
-
         self.root.as_bytes(&mut buf);
+
         buf
     }
 
+    /// Lists the hashes of the leaves this `Proof` proves the inclusion of (the hashes that were
+    /// passed to [`Proof::new()`] or [`Tree::proove()`]).
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    /// let baz = blake3::hash(b"baz");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// tree.insert(baz);
+    ///
+    /// let proof = tree.proove(&[foo, baz]).unwrap();
+    ///
+    /// let hashes = proof.hashes();
+    /// assert_eq!(hashes.len(), 2);
+    /// assert_eq!(hashes.contains(&foo), true);
+    /// assert_eq!(hashes.contains(&bar), false);
+    /// assert_eq!(hashes.contains(&baz), true);
+    /// ```
+    pub fn hashes(&self) -> Vec<Hash> {
+        fn hashes(branch: &ProofBranch, leaves: &mut Vec<Hash>) {
+            match &branch.left {
+                ProofNode::Branch(branch) => hashes(branch, leaves),
+                ProofNode::Leaf(leaf) => leaves.push(leaf.hash()),
+                ProofNode::Hash(_) | ProofNode::Empty => (),
+            }
+
+            match &branch.right {
+                ProofNode::Branch(branch) => hashes(branch, leaves),
+                ProofNode::Leaf(leaf) => leaves.push(leaf.hash()),
+                ProofNode::Hash(_) | ProofNode::Empty => (),
+            }
+        }
+
+        let mut leaves = Vec::new();
+        hashes(&self.root, &mut leaves);
+
+        leaves
+    }
+
+    /// Verifies and returns whether the proof is valid for the given tree [root hash].
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Tree};
+    ///
+    /// let foo = blake3::hash(b"foo");
+    /// let bar = blake3::hash(b"bar");
+    /// let baz = blake3::hash(b"baz");
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(foo);
+    /// tree.insert(bar);
+    /// tree.insert(baz);
+    ///
+    /// let root = tree.flush();
+    /// let proof = tree.proove(&[foo, bar]).unwrap();
+    ///
+    /// assert_eq!(proof.verify(root), true);
+    /// ```
+    ///
+    /// [root hash]: Tree::root()
     pub fn verify(&self, root: Hash) -> bool {
         self.root.hash() == root
     }
