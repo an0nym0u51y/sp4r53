@@ -1,9 +1,11 @@
+# Sparse Merkle tree
+
 [![img](https://img.shields.io/crates/l/sp4r53.svg)](https://github.com/r3v2d0g/sp4r53/blob/main/LICENSE.txt) [![img](https://img.shields.io/crates/v/sp4r53.svg)](https://crates.io/crates/sp4r53) [![img](https://docs.rs/sp4r53/badge.svg)](https://docs.rs/sp4r53)
 
 A sparse Merkle tree implementation that only recomputes its branches&rsquo; hashes when asked.
 
 
-# Example
+## Example
 
 ```rust
 use sp4r53::{blake3, Proof, Tree};
@@ -35,9 +37,6 @@ tree.remove(bar);
 let root = tree.flush();
 assert_eq!(proof.verify(root), false);
 ```
-
-
-# About
 
 
 ## License

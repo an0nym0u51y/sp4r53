@@ -103,7 +103,10 @@ pub struct Proof {
 pub enum Error {
     #[cfg_attr(feature = "thiserror", error("invalid branch tag"))]
     InvalidTag,
-    #[cfg_attr(feature = "thiserror", error("invalid tree (`flush()` must be called)"))]
+    #[cfg_attr(
+        feature = "thiserror",
+        error("invalid tree (`flush()` must be called)")
+    )]
     InvalidTree,
     #[cfg_attr(feature = "thiserror", error("missing node or leaf hash"))]
     MissingHash,
@@ -600,7 +603,7 @@ impl Proof {
                 ProofNode::Empty => (),
             }
         }
-       
+
         let (mut branches, mut hashes) = (1, 0);
         nodes(&self.root, &mut branches, &mut hashes);
 
@@ -900,7 +903,7 @@ impl Branch {
             (None, None) => {
                 dbg!(&self);
                 unreachable!()
-            },
+            }
         }
     }
 }
@@ -959,8 +962,10 @@ impl ProofBranch {
                 buf
             }
             HASH_TAG => {
-                dest.left =
-                    Hash::from(<[u8; 32]>::try_from(buf.get(0..32).ok_or(Error::MissingHash)?).unwrap()).into();
+                dest.left = Hash::from(
+                    <[u8; 32]>::try_from(buf.get(0..32).ok_or(Error::MissingHash)?).unwrap(),
+                )
+                .into();
                 &buf[32..]
             }
             LEAF_TAG => {
@@ -981,8 +986,10 @@ impl ProofBranch {
                 buf
             }
             HASH_TAG => {
-                dest.right =
-                    Hash::from(<[u8; 32]>::try_from(buf.get(0..32).ok_or(Error::MissingHash)?).unwrap()).into();
+                dest.right = Hash::from(
+                    <[u8; 32]>::try_from(buf.get(0..32).ok_or(Error::MissingHash)?).unwrap(),
+                )
+                .into();
                 &buf[32..]
             }
             LEAF_TAG => {
@@ -1069,7 +1076,7 @@ impl Leaf {
     }
 
     fn next_change(&self, height: u8) -> Option<u8> {
-        let mask = (U256::new(1) << height) - 1;
+        let mask = (U256::ONE << height) - 1;
         let height = match &self[height] {
             Direction::Left => (self.0 & mask).leading_zeros(),
             Direction::Right => (self.0 | !mask).leading_ones(),
@@ -1214,7 +1221,7 @@ impl Index<u8> for Leaf {
 
     #[inline]
     fn index(&self, height: u8) -> &Direction {
-        if self.0 & (U256::new(1) << height) == U256::ZERO {
+        if self.0 & (U256::ONE << height) == U256::ZERO {
             &Direction::Left
         } else {
             &Direction::Right

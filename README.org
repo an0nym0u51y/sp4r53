@@ -1,13 +1,13 @@
-#+TITLE: Sparse Merkle tree
 #+OPTIONS: toc:nil
 
+* Sparse Merkle tree
 [[https://github.com/r3v2d0g/sp4r53/blob/main/LICENSE.txt][https://img.shields.io/crates/l/sp4r53.svg]]
 [[https://crates.io/crates/sp4r53][https://img.shields.io/crates/v/sp4r53.svg]]
 [[https://docs.rs/sp4r53][https://docs.rs/sp4r53/badge.svg]]
 
 A sparse Merkle tree implementation that only recomputes its branches' hashes when asked.
 
-* Example
+** Example
 #+BEGIN_SRC rust
 use sp4r53::{blake3, Proof, Tree};
 
@@ -39,7 +39,6 @@ let root = tree.flush();
 assert_eq!(proof.verify(root), false);
 #+END_SRC
 
-* About
 ** License
 #+BEGIN_QUOTE
 This Source Code Form is subject to the terms of the Mozilla Public
