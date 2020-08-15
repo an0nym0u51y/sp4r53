@@ -47,9 +47,9 @@
 
 // =========================================== Imports ========================================== \\
 
-pub use blake3;
+pub use blake3::{self, Hash};
 
-use blake3::{Hash, Hasher};
+use blake3::Hasher;
 use core::convert::TryFrom;
 use core::iter::FromIterator;
 use core::ops::{Index, IndexMut};
@@ -102,19 +102,27 @@ pub struct Proof {
 #[cfg_attr(feature = "thiserror", derive(Error))]
 pub enum Error {
     #[cfg_attr(feature = "thiserror", error("invalid branch tag"))]
+    /// Invalid branch tag.
     InvalidTag,
     #[cfg_attr(
         feature = "thiserror",
         error("invalid tree (`flush()` must be called)")
     )]
+    /// Invalid tree ([`flush()`] must be called).
+    ///
+    /// [`flush()`]: Tree::flush()
     InvalidTree,
     #[cfg_attr(feature = "thiserror", error("missing node or leaf hash"))]
+    /// Missing node or leaf hash.
     MissingHash,
     #[cfg_attr(feature = "thiserror", error("missing branch height"))]
+    /// Missing branch height.
     MissingHeight,
     #[cfg_attr(feature = "thiserror", error("missing required leaf"))]
+    /// Missing required leaf.
     MissingLeaf,
     #[cfg_attr(feature = "thiserror", error("missing branch tag"))]
+    /// Missing branch tag.
     MissingTag,
 }
 
