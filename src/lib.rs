@@ -570,6 +570,53 @@ impl Proof {
  *     │                                        Read                                        │     *
 \*     └────────────────────────────────────────────────────────────────────────────────────┘     */
 
+    /// Returns the size of the `Vec<u8>` that [`as_bytes()`] will return.
+    ///
+    /// ## Example
+    ///
+    /// ```rust
+    /// use sp4r53::{blake3, Proof, Tree};
+    ///
+    /// let hash1 = blake3::Hash::from([0; 32]);
+    /// let hash2 = blake3::Hash::from([255; 32]);
+    ///
+    /// let mut tree = Tree::new();
+    ///
+    /// tree.insert(hash1);
+    /// tree.insert(hash2);
+    ///
+    /// let proof = tree.proove(&[hash1]).unwrap();
+    /// assert_eq!(proof.size(), 66);
+    /// ```
+    ///
+    /// [`as_bytes()`]: Proof::as_bytes()
+    pub fn size(&self) -> usize {
+        fn nodes(branch: &ProofBranch, branches: &mut usize, hashes: &mut usize) {
+            match &branch.left {
+                ProofNode::Branch(branch) => {
+                    *branches += 1;
+                    nodes(branch, branches, hashes);
+                }
+                ProofNode::Hash(_) | ProofNode::Leaf(_) => *hashes += 1,
+                ProofNode::Empty => (),
+            }
+
+            match &branch.right {
+                ProofNode::Branch(branch) => {
+                    *branches += 1;
+                    nodes(branch, branches, hashes);
+                }
+                ProofNode::Hash(_) | ProofNode::Leaf(_) => *hashes += 1,
+                ProofNode::Empty => (),
+            }
+        }
+
+        let (mut branches, mut hashes) = (1, 0);
+        nodes(&self.root, &mut branches, &mut hashes);
+
+        2 * branches + hashes * 32
+    }
+
     /// Converts the proof into bytes using an efficient-ish format.
     ///
     /// ## Format
@@ -614,30 +661,7 @@ impl Proof {
     /// assert_eq!(proof.as_bytes(), encoded);
     /// ```
     pub fn as_bytes(&self) -> Vec<u8> {
-        fn nodes(branch: &ProofBranch, branches: &mut usize, hashes: &mut usize) {
-            match &branch.left {
-                ProofNode::Branch(branch) => {
-                    *branches += 1;
-                    nodes(branch, branches, hashes);
-                }
-                ProofNode::Hash(_) | ProofNode::Leaf(_) => *hashes += 1,
-                ProofNode::Empty => (),
-            }
-
-            match &branch.right {
-                ProofNode::Branch(branch) => {
-                    *branches += 1;
-                    nodes(branch, branches, hashes);
-                }
-                ProofNode::Hash(_) | ProofNode::Leaf(_) => *hashes += 1,
-                ProofNode::Empty => (),
-            }
-        }
-
-        let (mut branches, mut hashes) = (1, 0);
-        nodes(&self.root, &mut branches, &mut hashes);
-
-        let mut buf = vec![0; 2 * branches + hashes * 32];
+        let mut buf = vec![0; self.size()];
         self.root.as_bytes(&mut buf);
 
         buf
